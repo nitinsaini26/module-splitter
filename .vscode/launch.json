@@ -1,0 +1,163 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 1. Run Extension — opens an Extension Development Host with ASTra loaded
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "compile",
+      "presentation": {
+        "group": "dev",
+        "order": 1
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 2. Run Extension (watch) — auto-recompiles on save; reload with Ctrl+Shift+F5
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "name": "Run Extension (watch)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "watch",
+      "presentation": {
+        "group": "dev",
+        "order": 2
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 3. Run Extension Tests — runs Jest against __tests__/**
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "name": "Run Extension Tests",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": [
+        "--no-coverage",
+        "--runInBand",
+        "--forceExit"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "presentation": {
+        "group": "test",
+        "order": 1
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 4. Debug Single Test File — set TEST_FILE env var or pass as arg
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "name": "Debug Single Test File",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": [
+        "--no-coverage",
+        "--runInBand",
+        "--forceExit",
+        "--testPathPattern",
+        "${input:testFile}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "presentation": {
+        "group": "test",
+        "order": 2
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 5. Debug Active Test File — debug whichever test file is open in editor
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "name": "Debug Active Test File",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": [
+        "--no-coverage",
+        "--runInBand",
+        "--forceExit",
+        "--testPathPattern",
+        "${relativeFile}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "presentation": {
+        "group": "test",
+        "order": 3
+      }
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 6. Attach to Extension Host — attach debugger to a running Extension Host
+    //    Use when Extension Host is already running and you want to attach
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "name": "Attach to Extension Host",
+      "type": "node",
+      "request": "attach",
+      "port": 6009,
+      "sourceMaps": true,
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "presentation": {
+        "group": "dev",
+        "order": 3
+      }
+    }
+
+  ],
+
+  "inputs": [
+    {
+      "id": "testFile",
+      "type": "promptString",
+      "description": "Test file pattern (e.g. features, pipeline, features3)",
+      "default": "features"
+    }
+  ],
+
+  "compounds": [
+    // Run extension AND attach debugger in one step
+    {
+      "name": "Extension + Debugger",
+      "configurations": ["Run Extension", "Attach to Extension Host"],
+      "presentation": {
+        "group": "dev",
+        "order": 4
+      },
+      "stopAll": true
+    }
+  ]
+}

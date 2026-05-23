@@ -1,0 +1,24 @@
+{
+  "recommendations": [
+    // TypeScript / JavaScript
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-vscode.vscode-typescript-next",
+
+    // Testing
+    "orta.vscode-jest",
+    "ms-vscode.test-adapter-converter",
+
+    // Extension development
+    "ms-vscode.extension-test-runner",
+
+    // Git
+    "eamodio.gitlens",
+    "mhutchie.git-graph",
+
+    // Code quality
+    "sonarsource.sonarlint-vscode",
+    "usernamehw.errorlens"
+  ],
+  "unwantedRecommendations": []
+}

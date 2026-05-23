@@ -1,0 +1,277 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // compile — one-shot TypeScript build (used by launch.json preLaunchTask)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "compile",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "compile"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": "$tsc",
+      "detail": "Compile TypeScript → out/ (one-shot)"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // watch — incremental TypeScript compiler in watch mode
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "watch",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "watch"],
+      "group": "build",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "problemMatcher": {
+        "owner": "typescript",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": "$tsc",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting compilation in watch mode",
+          "endsPattern": "Watching for file changes"
+        }
+      },
+      "detail": "TypeScript watch mode — recompiles on save"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // typecheck — tsc --noEmit, surfaces type errors without emitting files
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "typecheck",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "typecheck"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": "$tsc",
+      "detail": "tsc --noEmit — type-check only, no output"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // test — full Jest test suite with coverage
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "test"],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Jest — full test suite with coverage"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // test:watch — Jest in interactive watch mode
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "test:watch",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "test:watch"],
+      "group": "test",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Jest watch mode — reruns on file change"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // test:pipeline — run only the pipeline test suite
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "test:pipeline",
+      "type": "shell",
+      "command": "./node_modules/.bin/jest",
+      "args": ["--testPathPattern=pipeline", "--no-coverage", "--forceExit"],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Jest — pipeline.test.ts only (62 tests)"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // test:features — run incremental cache + Halstead threshold tests
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "test:features",
+      "type": "shell",
+      "command": "./node_modules/.bin/jest",
+      "args": ["--testPathPattern=features.test", "--no-coverage", "--forceExit"],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Jest — features.test.ts (cache + threshold, 35 tests)"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // test:framework — run workspace graph + framework plugin tests
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "test:framework",
+      "type": "shell",
+      "command": "./node_modules/.bin/jest",
+      "args": ["--testPathPattern=features3", "--no-coverage", "--forceExit"],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Jest — features3.test.ts (workspace graph + Vue/Angular/Svelte, 47 tests)"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // lint — ESLint across all src/**/*.ts
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "lint",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "lint"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": "$eslint-stylish",
+      "detail": "ESLint — src/**/*.ts"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // lint:fix — ESLint with --fix
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "lint:fix",
+      "type": "shell",
+      "command": "./node_modules/.bin/eslint",
+      "args": ["src", "--ext", ".ts", "--fix"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": "$eslint-stylish",
+      "detail": "ESLint --fix"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // clean — delete out/ directory
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "clean",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "clean"],
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "rimraf out/ — delete compiled output"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // clean:compile — clean then compile (full rebuild)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "clean:compile",
+      "dependsOrder": "sequence",
+      "dependsOn": ["clean", "compile"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": "$tsc",
+      "detail": "Clean then full recompile"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // package — vsce package → astra-module-splitter-x.x.x.vsix
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "package",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "package"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "vsce package — build .vsix for local install or Marketplace"
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // install:local — install the .vsix into the running VS Code
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+      "label": "install:local",
+      "type": "shell",
+      "command": "code",
+      "args": [
+        "--install-extension",
+        "astra-module-splitter-3.0.0.vsix"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Install .vsix into current VS Code instance"
+    }
+
+  ]
+}

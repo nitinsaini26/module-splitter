@@ -42,27 +42,27 @@ Or use the Command Palette: **ASTra: Analyse & Split This Module**
 
 ## Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `astra.extractionThreshold` | `0.35` | User bias for Halstead-calibrated threshold (0.1–0.9) |
-| `astra.testFramework` | `auto` | `jest` / `vitest` / `auto` |
-| `astra.showInlineSmells` | `true` | Show smell squiggles in editor |
-| `astra.statusBarEnabled` | `true` | Show health grade in status bar |
-| `astra.showOnSave` | `false` | Auto-analyse on save |
-| `astra.autoApply` | `false` | Apply split without review |
-| `astra.typesFile` | `""` | Path to existing types file |
-| `astra.ignorePatterns` | `[...]` | Glob patterns to exclude |
+| Setting                     | Default | Description                                           |
+| --------------------------- | ------- | ----------------------------------------------------- |
+| `astra.extractionThreshold` | `0.35`  | User bias for Halstead-calibrated threshold (0.1–0.9) |
+| `astra.testFramework`       | `auto`  | `jest` / `vitest` / `auto`                            |
+| `astra.showInlineSmells`    | `true`  | Show smell squiggles in editor                        |
+| `astra.statusBarEnabled`    | `true`  | Show health grade in status bar                       |
+| `astra.showOnSave`          | `false` | Auto-analyse on save                                  |
+| `astra.autoApply`           | `false` | Apply split without review                            |
+| `astra.typesFile`           | `""`    | Path to existing types file                           |
+| `astra.ignorePatterns`      | `[...]` | Glob patterns to exclude                              |
 
 ---
 
 ## Commands
 
-| Command | Keybinding |
-|---------|-----------|
+| Command                            | Keybinding         |
+| ---------------------------------- | ------------------ |
 | ASTra: Analyse & Split This Module | `Ctrl+Shift+Alt+S` |
-| ASTra: Apply Split Plan | — |
-| ASTra: Show File Metrics | — |
-| ASTra: Clear Diagnostics | — |
+| ASTra: Apply Split Plan            | —                  |
+| ASTra: Show File Metrics           | —                  |
+| ASTra: Clear Diagnostics           | —                  |
 
 ---
 
@@ -91,13 +91,13 @@ See `.vscode/launch.json` for all debug configurations and `.vscode/tasks.json` 
 
 ## Docs
 
-| Document | Description |
-|----------|-------------|
-| [`docs/FEATURES.md`](docs/FEATURES.md) | Complete feature reference — all 16 features |
-| [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) | Deep-dive into the 8-stage pipeline |
-| [`docs/EXTENSION_SETUP.md`](docs/EXTENSION_SETUP.md) | Setup, limitations, roadmap |
-| [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md) | Standalone project / CLI setup |
-| [`docs/ASTra-v3-paper.md`](docs/ASTra-v3-paper.md) | Research paper (publishable) |
+| Document                                             | Description                                  |
+| ---------------------------------------------------- | -------------------------------------------- |
+| [`docs/FEATURES.md`](docs/FEATURES.md)               | Complete feature reference — all 16 features |
+| [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)       | Deep-dive into the 8-stage pipeline          |
+| [`docs/EXTENSION_SETUP.md`](docs/EXTENSION_SETUP.md) | Setup, limitations, roadmap                  |
+| [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md)     | Standalone project / CLI setup               |
+| [`docs/ASTra-v3-paper.md`](docs/ASTra-v3-paper.md)   | Research paper (publishable)                 |
 
 ---
 
