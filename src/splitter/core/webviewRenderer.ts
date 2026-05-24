@@ -635,6 +635,9 @@ function renderSmells(plan: SplitPlan): string {
         </div>
         <div class="err-loc">${esc(smell.description)}</div>
         <div class="err-fix">${I.check} ${esc(smell.recommendation)}</div>
+        ${smell.suggestedFileName ? `<div class="err-fix">${I.files} Suggested file: <code>${esc(smell.suggestedFileName)}</code></div>` : ""}
+        ${smell.remediationSteps?.length ? `<div class="err-fix">${smell.remediationSteps.map((step) => `• ${esc(step)}`).join("<br>")}</div>` : ""}
+        ${smell.generatedContent ? `<pre style="margin:8px 12px 0;padding:8px;border:1px solid var(--vscode-panel-border,rgba(127,127,127,.1));border-radius:6px;overflow:auto;white-space:pre-wrap">${esc(smell.generatedContent)}</pre>` : ""}
       </div>`;
         })
         .join("")}`

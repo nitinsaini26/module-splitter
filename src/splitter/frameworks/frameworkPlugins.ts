@@ -35,10 +35,93 @@ export interface FrameworkSmell {
   framework: "vue" | "angular" | "svelte";
   /** 1-based line number where the smell originates */
   line: number;
+  suggestedFileName?: string;
+  generatedContent?: string;
+  remediationSteps?: string[];
 }
 
 function count(src: string, re: RegExp): number {
   return (src.match(re) ?? []).length;
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .replace(/\.[^.]+$/, "")
+    .replace(/(^|[-_\s]+)([a-zA-Z0-9])/g, (_match, _sep, chr: string) =>
+      chr.toUpperCase(),
+    )
+    .replace(/[^a-zA-Z0-9]/g, "");
+}
+
+function toKebabCase(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function vueComponentBaseName(filePath?: string): string {
+  if (!filePath) return "Component";
+  const base = filePath.split(/[\\/]/).pop() ?? "Component.vue";
+  return toPascalCase(base) || "Component";
+}
+
+function angularClassName(src: string): string {
+  const match = src.match(/export\s+class\s+([A-Za-z0-9_]+)/);
+  return match?.[1] ?? "Component";
+}
+
+function buildComposablePreview(
+  componentName: string,
+  bindings: string[],
+): string {
+  const uniqueBindings = [...new Set(bindings)].slice(0, 6);
+  const returnBlock = uniqueBindings.length
+    ? `  return { ${uniqueBindings.join(", ")} };`
+    : "  return {};";
+  return [
+    `export function use${componentName}() {`,
+    "  // ASTra extracted related state and watchers into a composable.",
+    returnBlock,
+    "}",
+  ].join("\n");
+}
+
+function buildAngularServicePreview(className: string): string {
+  const serviceName =
+    className.replace(/Component$/, "Service") || "ComponentService";
+  return [
+    "import { Injectable } from '@angular/core';",
+    "",
+    "@Injectable({ providedIn: 'root' })",
+    `export class ${serviceName} {`,
+    "  // Move data loading, orchestration, and transformation logic here.",
+    "}",
+  ].join("\n");
+}
+
+function buildAngularStandaloneGuide(className: string): string {
+  return [
+    `# Standalone migration guide for ${className}`,
+    "",
+    "1. Add standalone: true to the @Component decorator.",
+    "2. Move module dependencies into the component imports array.",
+    "3. Delete the NgModule declaration after the component compiles.",
+    "4. Keep services injectable via providedIn: 'root' or feature providers.",
+  ].join("\n");
+}
+
+function buildVueMigrationGuide(componentName: string): string {
+  return [
+    `# Vue Composition API migration guide for ${componentName}`,
+    "",
+    "1. Move data() state into ref() / reactive().",
+    "2. Convert computed options into computed() declarations.",
+    "3. Move watchers into watch() or watchEffect() with cleanup.",
+    "4. Split repeated state or logic into useX() composables.",
+    "5. Keep the template focused on presentation only.",
+  ].join("\n");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,10 +152,49 @@ function extractVueBlocks(src: string): VueBlocks {
   };
 }
 
-export function detectVueSmells(src: string): FrameworkSmell[] {
+export function detectVueSmells(
+  src: string,
+  filePath?: string,
+): FrameworkSmell[] {
   const smells: FrameworkSmell[] = [];
   const { scriptSetup, scriptLegacy, template } = extractVueBlocks(src);
   const script = scriptSetup || scriptLegacy;
+  const componentName = vueComponentBaseName(filePath);
+
+  const composableBindings = [
+    ...scriptSetup.matchAll(
+      /const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:ref|computed|reactive|shallowRef|readonly)\s*\(/g,
+    ),
+  ].map((match) => match[1]);
+  const watcherCount = count(scriptSetup, /\bwatch(?:Effect)?\s*\(/g);
+  const extractedBindings = [...new Set(composableBindings)];
+
+  if (
+    extractedBindings.length >= 3 ||
+    (extractedBindings.length >= 2 && watcherCount > 0)
+  ) {
+    const fileSlug = toKebabCase(componentName);
+    smells.push({
+      name: "Vue Composable Candidate",
+      severity: "medium",
+      description:
+        "Related refs/computed/watchers are clustered in <script setup> and can be moved into a composable",
+      recommendation: `Extract the shared state into composables/use-${fileSlug}.ts and return the grouped bindings from use${componentName}().`,
+      autoFixable: false,
+      framework: "vue",
+      line: 1,
+      suggestedFileName: `composables/use-${fileSlug}.ts`,
+      generatedContent: buildComposablePreview(
+        componentName,
+        extractedBindings,
+      ),
+      remediationSteps: [
+        "Group related refs/computed/watchers by feature boundary.",
+        "Move the group into a new useX() composable.",
+        "Import the composable back into the SFC and keep only view logic there.",
+      ],
+    });
+  }
 
   // ── V3 Composition API smells ─────────────────────────────────────────────
 
@@ -127,6 +249,36 @@ export function detectVueSmells(src: string): FrameworkSmell[] {
 
   // Options API smells (legacy)
   if (scriptLegacy) {
+    const apiSections = [
+      /\bdata\s*\(/.test(scriptLegacy),
+      /\bmethods\s*:/.test(scriptLegacy),
+      /\bcomputed\s*:/.test(scriptLegacy),
+      /\bwatch\s*:/.test(scriptLegacy),
+      /\bprops\s*:/.test(scriptLegacy),
+      /\bemits\s*:/.test(scriptLegacy),
+    ].filter(Boolean).length;
+
+    if (apiSections >= 3) {
+      smells.push({
+        name: "Vue Composition API Migration Guide",
+        severity: "medium",
+        description:
+          "Options API sections are present and the component is a good candidate for a step-by-step Composition API migration",
+        recommendation:
+          "Move state from data() into ref()/reactive(), migrate computed/watch blocks, and split repeated logic into composables.",
+        autoFixable: false,
+        framework: "vue",
+        line: 1,
+        suggestedFileName: `docs/${toKebabCase(componentName)}-composition-api.md`,
+        generatedContent: buildVueMigrationGuide(componentName),
+        remediationSteps: [
+          "Translate data() properties into explicit refs.",
+          "Replace computed/watch sections with Composition API calls.",
+          "Extract shared logic into composables before migrating the template.",
+        ],
+      });
+    }
+
     // Fat data() function
     const dataMatch = scriptLegacy.match(/data\s*\(\s*\)\s*\{([\s\S]*?)\}/);
     if (dataMatch && dataMatch[1].split("\n").length > 20) {
@@ -255,6 +407,7 @@ export function detectVueSmells(src: string): FrameworkSmell[] {
 export function detectAngularSmells(src: string): FrameworkSmell[] {
   const smells: FrameworkSmell[] = [];
   const lines = src.split("\n");
+  const className = angularClassName(src);
 
   // ── @Component smells ─────────────────────────────────────────────────────
 
@@ -304,6 +457,57 @@ export function detectAngularSmells(src: string): FrameworkSmell[] {
         autoFixable: false,
         framework: "angular",
         line: 1,
+      });
+    }
+
+    const ngOnInitMatch = src.match(
+      /ngOnInit\s*\(\s*\)\s*\{([\s\S]*?)(?=\n\s{2}\w|\n\})/,
+    );
+    const helperMethodCount = (src.match(/\n\s{2}[A-Za-z_$][\w$]*\s*\(/g) ?? [])
+      .length;
+    const initBodyLines = ngOnInitMatch
+      ? ngOnInitMatch[1].split("\n").filter((line) => line.trim()).length
+      : 0;
+    if (ngOnInitMatch && (initBodyLines > 10 || helperMethodCount >= 4)) {
+      const serviceName =
+        className.replace(/Component$/, "Service") || "ComponentService";
+      smells.push({
+        name: "Angular Service Extraction Candidate",
+        severity: "medium",
+        description:
+          "Business logic is clustered in ngOnInit and component methods and is a good candidate for a dedicated service",
+        recommendation: `Move the shared business logic into ${serviceName} and inject it back into the component.`,
+        autoFixable: false,
+        framework: "angular",
+        line: 1,
+        suggestedFileName: `${serviceName}.ts`,
+        generatedContent: buildAngularServicePreview(className),
+        remediationSteps: [
+          "Extract orchestration and data-access logic from ngOnInit().",
+          "Move reusable helpers into an injectable service.",
+          "Inject the service into the component and keep the component lean.",
+        ],
+      });
+    }
+
+    if (/standalone\s*:\s*true/.test(src) === false) {
+      smells.push({
+        name: "Angular Standalone Migration Candidate",
+        severity: "medium",
+        description:
+          "Component still uses the NgModule-era shape and can be migrated to a standalone component",
+        recommendation:
+          "Add standalone: true, move dependencies into the component imports array, and remove the NgModule declaration once the component is migrated.",
+        autoFixable: false,
+        framework: "angular",
+        line: 1,
+        suggestedFileName: `${className}.standalone.md`,
+        generatedContent: buildAngularStandaloneGuide(className),
+        remediationSteps: [
+          "Mark the component standalone.",
+          "Inline the needed module imports into the component decorator.",
+          "Drop the old NgModule wrapper once the component is self-contained.",
+        ],
       });
     }
   }
@@ -597,7 +801,7 @@ export function detectFrameworkSmells(
   const kind = detectFrameworkKind(src, filePath);
   switch (kind) {
     case "vue":
-      return detectVueSmells(src);
+      return detectVueSmells(src, filePath);
     case "angular":
       return detectAngularSmells(src);
     case "svelte":

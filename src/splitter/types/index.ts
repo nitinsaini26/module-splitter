@@ -416,6 +416,9 @@ export interface FrameworkSmellRecord {
   autoFixable: boolean;
   framework: "vue" | "angular" | "svelte";
   line: number;
+  suggestedFileName?: string;
+  generatedContent?: string;
+  remediationSteps?: string[];
 }
 
 export interface SplitPlan {

@@ -678,6 +678,9 @@ export class ModuleSplitter {
         autoFixable: s.autoFixable,
         framework: s.framework,
         line: s.line,
+        suggestedFileName: s.suggestedFileName,
+        generatedContent: s.generatedContent,
+        remediationSteps: s.remediationSteps,
       }),
     );
 
