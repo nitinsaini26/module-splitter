@@ -34,6 +34,12 @@ let _plan: SplitPlan | undefined;
 let _sourceDoc: vscode.TextDocument | undefined;
 let _ctx: vscode.ExtensionContext;
 
+interface AnalyseOptions {
+  showPanel?: boolean;
+  showNotification?: boolean;
+  reason?: "save" | "manual";
+}
+
 /** Set the `astraHasPlan` context key — controls when Apply keybinding is active */
 export function setHasPlanContext(value: boolean): void {
   vscode.commands.executeCommand("setContext", "astraHasPlan", value);
@@ -57,7 +63,7 @@ export function registerAnalyseCommand(
     //   c) Explorer context menu         → uri is the clicked file's Uri
     vscode.commands.registerCommand(
       "astra.analyseFile",
-      async (uri?: vscode.Uri) => {
+      async (uri?: vscode.Uri, options?: AnalyseOptions) => {
         // ── Resolve the document to analyse ──────────────────────────────
         let doc: vscode.TextDocument | undefined;
 
@@ -100,78 +106,67 @@ export function registerAnalyseCommand(
         const fileName = path.basename(doc.fileName);
         _sourceDoc = doc; // remember for Apply
 
-        // ── Run analysis pipeline ─────────────────────────────────────────
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `ASTra: Analysing ${fileName}`,
-            cancellable: false,
-          },
-          async (progress) => {
-            progress.report({ increment: 10, message: "Parsing AST…" });
-            const source = doc!.getText();
-            const wsCtx = await buildWorkspaceContext(doc!.fileName);
-            const userThresh =
-              vscode.workspace
-                .getConfiguration("astra")
-                .get<number>("extractionThreshold") ?? 0.35;
+        const showPanel = options?.showPanel !== false;
+        const showNotification = options?.showNotification !== false;
 
-            progress.report({
-              increment: 25,
-              message: "Building workspace graph…",
-            });
-            const wsFolder =
-              vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
-            const allFiles = await vscode.workspace.findFiles(
-              "**/*.{ts,tsx,js,jsx}",
-              "{**/node_modules/**,**/dist/**,**/out/**}",
-              800,
-            );
-            const wsGraph = await workspaceGraphBuilder.build(
-              wsFolder,
-              allFiles.map((u) => u.fsPath),
-            );
+        sb.beginProgress(`ASTra: Analysing ${fileName}`);
+        try {
+          const source = doc!.getText();
+          const wsCtx = await buildWorkspaceContext(doc!.fileName);
+          const userThresh =
+            vscode.workspace
+              .getConfiguration("astra")
+              .get<number>("extractionThreshold") ?? 0.35;
 
-            progress.report({
-              increment: 55,
-              message: "Computing metrics & smells…",
-            });
-            _plan = moduleSplitter.analyse(
-              source,
-              fileName,
-              wsCtx,
-              userThresh,
-              doc!.fileName,
-              wsGraph,
-            );
+          const wsFolder =
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+          const allFiles = await collectWorkspaceFiles(doc!.fileName, wsFolder);
+          const wsGraph = await workspaceGraphBuilder.build(
+            wsFolder,
+            allFiles.map((u) => u.fsPath),
+          );
 
-            progress.report({
-              increment: 80,
-              message: "Publishing diagnostics…",
-            });
-            diag.publish(doc!.uri, _plan);
-            sb.updateFromPlan(doc!, _plan);
+          _plan = moduleSplitter.analyse(
+            source,
+            fileName,
+            wsCtx,
+            userThresh,
+            doc!.fileName,
+            wsGraph,
+          );
 
-            progress.report({ increment: 95, message: "Rendering panel…" });
+          diag.publish(doc!.uri, _plan);
+          sb.endProgress();
+          sb.updateFromPlan(doc!, _plan);
 
-            // Set context key so the Apply keybinding activates
-            setHasPlanContext(_plan.proposedFiles.length > 0);
+          // Set context key so the Apply keybinding activates
+          setHasPlanContext(_plan.proposedFiles.length > 0);
 
-            const cfg = vscode.workspace.getConfiguration("astra");
-            if (
-              cfg.get<boolean>("autoApply") &&
-              _plan.proposedFiles.length > 0
-            ) {
-              const result = await refactoringExecutor.apply(_plan, doc!);
-              workspaceGraphBuilder.invalidate();
-              refactoringExecutor.showResult(result);
-            } else {
-              _showPanel(_plan);
-            }
-
-            progress.report({ increment: 100 });
-          },
-        );
+          const cfg = vscode.workspace.getConfiguration("astra");
+          if (cfg.get<boolean>("autoApply") && _plan.proposedFiles.length > 0) {
+            const result = await refactoringExecutor.apply(_plan, doc!);
+            workspaceGraphBuilder.invalidate();
+            refactoringExecutor.showResult(result);
+          } else if (showPanel) {
+            _showPanel(_plan);
+          } else if (showNotification) {
+            vscode.window
+              .showInformationMessage(
+                "ASTra: Analysis complete.",
+                "Show Report",
+              )
+              .then((sel) => {
+                if (sel === "Show Report" && _plan) {
+                  _showPanel(_plan);
+                }
+              });
+          }
+        } catch (e) {
+          sb.endProgress();
+          vscode.window.showErrorMessage(
+            `ASTra: Analysis failed — ${String(e)}`,
+          );
+        }
       },
     ),
   );
@@ -208,6 +203,8 @@ async function _doApply(): Promise<void> {
     );
     return;
   }
+
+  await showDiffPreview(_sourceDoc, _plan.updatedSourceContent);
 
   // Confirm with the user
   const fileWord = _plan.proposedFiles.length === 1 ? "file" : "files";
@@ -258,9 +255,16 @@ function _showPanel(plan: SplitPlan): void {
 
   // Handle the "Apply" button click inside the webview
   _panel.webview.onDidReceiveMessage(
-    async (msg: { command: string }) => {
+    async (msg: { command: string; text?: string; name?: string }) => {
       if (msg.command === "apply") {
         await _doApply();
+      } else if (msg.command === "copy" && msg.text) {
+        await vscode.env.clipboard.writeText(msg.text);
+        if (msg.name) {
+          vscode.window.showInformationMessage(
+            `ASTra: Copied ${msg.name} to clipboard.`,
+          );
+        }
       }
     },
     undefined,
@@ -274,6 +278,26 @@ function _showPanel(plan: SplitPlan): void {
     null,
     _ctx.subscriptions,
   );
+}
+
+async function showDiffPreview(
+  doc: vscode.TextDocument,
+  updatedSource: string,
+): Promise<void> {
+  try {
+    const previewDoc = await vscode.workspace.openTextDocument({
+      language: doc.languageId,
+      content: updatedSource,
+    });
+    await vscode.commands.executeCommand(
+      "vscode.diff",
+      doc.uri,
+      previewDoc.uri,
+      `ASTra Diff — ${path.basename(doc.fileName)}`,
+    );
+  } catch {
+    // non-fatal
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -342,6 +366,46 @@ async function buildWorkspaceContext(
       fs.existsSync(path.join(wsFolder, "nx.json")),
     tsConfig,
   };
+}
+
+async function collectWorkspaceFiles(
+  filePath: string,
+  workspaceRoot: string,
+): Promise<vscode.Uri[]> {
+  if (!workspaceRoot) {
+    return vscode.workspace.findFiles(
+      "**/*.{ts,tsx,js,jsx}",
+      "{**/node_modules/**,**/dist/**,**/out/**}",
+      800,
+    );
+  }
+
+  const relDir = path
+    .relative(workspaceRoot, path.dirname(filePath))
+    .replace(/\\/g, "/");
+  const segments = relDir ? relDir.split("/") : [];
+  const patterns = new Set<string>();
+  const maxUp = Math.min(2, segments.length);
+
+  for (let up = 0; up <= maxUp; up++) {
+    const dir = segments.slice(0, segments.length - up).join("/");
+    const base = dir ? `${dir}/**/*.{ts,tsx,js,jsx}` : "**/*.{ts,tsx,js,jsx}";
+    patterns.add(base);
+  }
+
+  const ignore = "{**/node_modules/**,**/dist/**,**/out/**}";
+  const results = await Promise.all(
+    [...patterns].map((pattern) =>
+      vscode.workspace.findFiles(pattern, ignore, 800),
+    ),
+  );
+
+  const unique = new Map<string, vscode.Uri>();
+  for (const list of results) {
+    for (const uri of list) unique.set(uri.fsPath, uri);
+  }
+
+  return [...unique.values()];
 }
 
 function loadNearestTsConfig(

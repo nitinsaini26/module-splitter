@@ -282,6 +282,29 @@ function extractLeadingComment(
   return line ? line[1].trim() : undefined;
 }
 
+function stripSvelteScript(sourceCode: string): string {
+  const lines = sourceCode.split("\n");
+  let inScript = false;
+  return lines
+    .map((line) => {
+      if (!inScript) {
+        const startIdx = line.search(/<script\b/i);
+        if (startIdx === -1) return "";
+        inScript = true;
+        return line.slice(startIdx).replace(/<script[^>]*>/i, "");
+      }
+
+      const endIdx = line.search(/<\/script>/i);
+      if (endIdx !== -1) {
+        inScript = false;
+        return line.slice(0, endIdx);
+      }
+
+      return line;
+    })
+    .join("\n");
+}
+
 function isExported(node: ts.Node): boolean {
   return (
     (ts.getCombinedModifierFlags(node as ts.Declaration) &
@@ -307,6 +330,8 @@ function classifyName(
   hasJSX: boolean,
   hasHooks: boolean,
 ): RegionKind {
+  if (/\$$/.test(name) && hasJSX) return "react-component";
+  if (/\$$/.test(name) && hasHooks) return "hook";
   if (/^use[A-Z]/.test(name)) return "hook";
   if (/^with[A-Z]/.test(name)) return "hoc";
   if (/Provider$/.test(name)) return "context-provider";
@@ -315,6 +340,16 @@ function classifyName(
   if (/^[A-Z]/.test(name)) return "react-component";
   if (hasJSX && !hasHooks) return "react-component";
   return "utility-function";
+}
+
+function isQwikComponentInitializer(init?: ts.Expression): boolean {
+  if (!init || !ts.isCallExpression(init)) return false;
+  const expr = init.expression;
+  if (ts.isIdentifier(expr) && expr.text === "component$") return true;
+  if (ts.isPropertyAccessExpression(expr) && expr.name.text === "component$") {
+    return true;
+  }
+  return false;
 }
 
 function inferDefaultExportName(fileName: string): string {
@@ -766,9 +801,11 @@ export function parseSourceFile(
   _regionCounter = 0; // Reset counter per file
 
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
+  const isSvelte = ext === "svelte";
+  const parseSource = isSvelte ? stripSvelteScript(sourceCode) : sourceCode;
 
   // ── Non-TS/JS fallback ───────────────────────────────────────────────────
-  if (!TS_EXTENSIONS.has(ext)) {
+  if (!TS_EXTENSIONS.has(ext) && !isSvelte) {
     const lines = sourceCode.split("\n");
     const raw = fallbackParse(lines);
     return {
@@ -797,7 +834,7 @@ export function parseSourceFile(
 
   const sf = ts.createSourceFile(
     fileName,
-    sourceCode,
+    parseSource,
     ts.ScriptTarget.Latest,
     /* setParentNodes */ true,
     scriptKind,
@@ -807,7 +844,7 @@ export function parseSourceFile(
     ((sf as any).parseDiagnostics as ts.Diagnostic[] | undefined) ?? []
   ).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
 
-  const allLines = sourceCode.split("\n");
+  const allLines = parseSource.split("\n");
   const regions: ASTRegion[] = [];
 
   ts.forEachChild(sf, (node) => {
@@ -835,9 +872,33 @@ export function parseSourceFile(
         ) {
           const hasJSX = containsJSX(decl);
           const hasHk = containsHookCalls(decl);
+          const kind = isQwikComponentInitializer(init)
+            ? "react-component"
+            : classifyName(name, hasJSX, hasHk);
           regions.push({
             id: newId(name),
-            kind: classifyName(name, hasJSX, hasHk),
+            kind,
+            name,
+            startLine,
+            endLine,
+            lines,
+            isExported: exported,
+            isDefaultExport: false,
+            hasJSX,
+            hasHooks: hasHk,
+            hasAsyncOps: containsAsync(decl),
+            localBindings,
+            usedSymbols,
+            symbolUsageKinds,
+            maxBracketDepth: depth,
+            leadingComment,
+          });
+        } else if (init && isQwikComponentInitializer(init)) {
+          const hasJSX = containsJSX(decl);
+          const hasHk = containsHookCalls(decl);
+          regions.push({
+            id: newId(name),
+            kind: "react-component",
             name,
             startLine,
             endLine,

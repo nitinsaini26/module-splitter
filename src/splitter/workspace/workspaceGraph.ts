@@ -51,7 +51,7 @@ export interface WorkspaceFileRecord {
   /** Whether this file already has a barrel/index role */
   isBarrel: boolean;
   /** Detected framework hint */
-  framework: "react" | "vue" | "angular" | "svelte" | "none";
+  framework: "react" | "vue" | "angular" | "svelte" | "qwik" | "none";
 }
 
 export interface WorkspaceRegionSummary {
@@ -138,6 +138,8 @@ function detectFramework(
   if (ext === ".vue") return "vue";
   if (ext === ".svelte") return "svelte";
   if (/@Component|@NgModule|@Injectable/.test(src)) return "angular";
+  if (/component\$\s*\(|useSignal\s*\(|useStore\s*\(|useTask\$\s*\(/.test(src))
+    return "qwik";
   if (/from ['"]react['"]|jsx|useState/.test(src)) return "react";
   return "none";
 }

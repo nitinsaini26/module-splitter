@@ -35,6 +35,8 @@ import {
 import { mergeAdvisor } from "../workspace/workspaceGraph";
 import { reExportChainResolver } from "../workspace/reExportChainResolver";
 import { semanticTypeResolver } from "../semantic/semanticTypeResolver";
+import { toKebabCase } from "../utils/helpers";
+import type { FileDirectives } from "../generator/fileGenerator";
 import type { WorkspaceGraph } from "../workspace/workspaceGraph";
 
 import type {
@@ -73,6 +75,72 @@ const LANG_MAP: Record<string, string> = {
 };
 const detectLanguage = (f: string) =>
   LANG_MAP[f.split(".").pop()?.toLowerCase() ?? ""] ?? "Unknown";
+
+const NEXT_CLIENT_RE = /^['"]use client['"];?$/;
+const NEXT_SERVER_RE = /^['"]use server['"];?$/;
+
+function detectFileDirectives(
+  lines: string[],
+  filePath: string,
+): FileDirectives {
+  let useClient = false;
+  let useServer = false;
+  let directiveText: string | undefined;
+  let directiveLine: number | undefined;
+
+  let inBlockComment = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = raw.trim();
+    if (!line) continue;
+    if (inBlockComment) {
+      if (line.includes("*/")) inBlockComment = false;
+      continue;
+    }
+    if (line.startsWith("/*")) {
+      if (!line.includes("*/")) inBlockComment = true;
+      continue;
+    }
+    if (line.startsWith("//")) continue;
+
+    if (NEXT_CLIENT_RE.test(line)) {
+      useClient = true;
+      directiveText = raw.trim().replace(/;?$/, ";");
+      directiveLine = i + 1;
+    } else if (NEXT_SERVER_RE.test(line)) {
+      useServer = true;
+      directiveText = raw.trim().replace(/;?$/, ";");
+      directiveLine = i + 1;
+    }
+    break;
+  }
+
+  const isNextAppRouter = /[/\\]app[/\\]/.test(filePath);
+
+  return {
+    useClient,
+    useServer,
+    directiveText,
+    directiveLine,
+    isNextAppRouter,
+  };
+}
+
+function isRouteModule(sourceCode: string): boolean {
+  return /export\s+(?:async\s+)?(?:function|const)\s+(loader|action|meta)\b/.test(
+    sourceCode,
+  );
+}
+
+function hasClientEventHandlers(region: EnrichedRegion): boolean {
+  const src = region.lines.join("\n");
+  return /on[A-Z][A-Za-z]+\s*=/.test(src);
+}
+
+function isSvelteStoreRegion(region: EnrichedRegion): boolean {
+  const src = region.lines.join("\n");
+  return /\bconst\s+\w+\s*=\s*(writable|readable)\s*\(/.test(src);
+}
 
 function buildLinkageMap(
   proposedFiles: ProposedFile[],
@@ -187,6 +255,12 @@ export class ModuleSplitter {
     const language = detectLanguage(fileName);
     const lines = sourceCode.split("\n");
     const cacheKey = filePath || fileName;
+    const directives = detectFileDirectives(lines, filePath || fileName);
+    const nextBoundaryActive =
+      directives.useClient ||
+      directives.useServer ||
+      directives.isNextAppRouter;
+    const routeBoundaryActive = isRouteModule(sourceCode);
 
     // Stage 1: Parse
     const {
@@ -399,6 +473,55 @@ export class ModuleSplitter {
       };
     });
 
+    // ── Framework-aware boundaries & Svelte store extraction ─────────────
+    const boundaryNames = new Set(["loader", "action", "meta"]);
+    for (const region of enrichedRegions) {
+      if (routeBoundaryActive && boundaryNames.has(region.name)) {
+        region.extractionDecision = {
+          ...region.extractionDecision,
+          shouldExtract: false,
+          reasons: [
+            ...region.extractionDecision.reasons,
+            "Route export boundary (loader/action/meta)",
+          ],
+          confidence: "high",
+        };
+      }
+
+      if (
+        (filePath || fileName).endsWith(".svelte") &&
+        isSvelteStoreRegion(region)
+      ) {
+        region.extractionDecision = {
+          shouldExtract: true,
+          reasons: [
+            ...region.extractionDecision.reasons,
+            "Svelte store declared inline",
+          ],
+          confidence: "high",
+          miDelta: Math.max(1, region.extractionDecision.miDelta),
+          suggestedFileName: `stores/${toKebabCase(region.name)}.ts`,
+          suggestedDir: "stores",
+        };
+      }
+
+      if (
+        nextBoundaryActive &&
+        !directives.useClient &&
+        (region.hasHooks || hasClientEventHandlers(region))
+      ) {
+        region.extractionDecision = {
+          ...region.extractionDecision,
+          shouldExtract: false,
+          reasons: [
+            ...region.extractionDecision.reasons,
+            "Next.js server boundary (client features present)",
+          ],
+          confidence: "medium",
+        };
+      }
+    }
+
     // Stage 5c: Type routing + partition
     const typeRegions = enrichedRegions.filter((r) => r.kind === "type-block");
     const typeRouting = resolveTypeRouting(typeRegions, effectiveCtx);
@@ -435,6 +558,7 @@ export class ModuleSplitter {
         typeRouting,
         enrichedRegions,
         proposedFileMap,
+        directives,
       );
       pf.hasExistingTest = effectiveCtx.existingTestFiles.some((tf) =>
         tf.endsWith(pf.testFilePath),
@@ -475,6 +599,23 @@ export class ModuleSplitter {
     }
 
     const codeSmells = detectFileSmells(rawRegions, regionSmellMap);
+    if (nextBoundaryActive && !directives.useClient) {
+      const affected = enrichedRegions
+        .filter((r) => r.hasHooks || hasClientEventHandlers(r))
+        .map((r) => r.id);
+      if (affected.length > 0) {
+        codeSmells.push({
+          name: "React Server Component uses client features",
+          severity: "critical",
+          description:
+            "Hooks or event handlers detected without a 'use client' directive",
+          affectedRegionIds: affected,
+          recommendation:
+            "Add 'use client' to the file or move client-only logic into a client component",
+          autoFixable: false,
+        });
+      }
+    }
     const barrelExport = buildBarrelFile(proposedFiles);
     const testFileSuggestions: TestFileSuggestion[] = proposedFiles.map(
       (pf) => {
@@ -498,6 +639,9 @@ export class ModuleSplitter {
       extractionCandidates,
       proposedFiles,
       fileName,
+      effectiveCtx,
+      filePath || fileName,
+      directives,
     );
     const summary = buildSummary(
       enrichedRegions,

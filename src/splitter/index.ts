@@ -33,6 +33,8 @@ export { resolveImports } from "./resolver/importResolver";
 export {
   generateFileContent,
   buildBarrelFile,
+  mergeBarrelContent,
+  generateUpdatedSource,
 } from "./generator/fileGenerator";
 export {
   workspaceGraphBuilder,

@@ -11,6 +11,10 @@ import type { SplitPlan } from "../splitter/types";
 
 export class AstraStatusBar {
   private readonly item: vscode.StatusBarItem;
+  private busy = false;
+  private lastText = "";
+  private lastTooltip: string | vscode.MarkdownString | undefined;
+  private lastBackground?: vscode.ThemeColor;
 
   constructor(ctx: vscode.ExtensionContext) {
     this.item = vscode.window.createStatusBarItem(
@@ -21,6 +25,28 @@ export class AstraStatusBar {
     this.item.tooltip = "ASTra: Click to analyse & split this module";
     this.item.name = "ASTra Health";
     ctx.subscriptions.push(this.item);
+  }
+
+  beginProgress(label: string): void {
+    if (this.busy) return;
+    this.busy = true;
+    this.lastText = this.item.text;
+    this.lastTooltip = this.item.tooltip;
+    this.lastBackground = this.item.backgroundColor as
+      | vscode.ThemeColor
+      | undefined;
+    this.item.text = `$(sync~spin) ${label}`;
+    this.item.tooltip = "ASTra: Analysis running…";
+    this.item.backgroundColor = undefined;
+    this.item.show();
+  }
+
+  endProgress(): void {
+    if (!this.busy) return;
+    this.busy = false;
+    this.item.text = this.lastText;
+    this.item.tooltip = this.lastTooltip;
+    this.item.backgroundColor = this.lastBackground;
   }
 
   /** Called when active editor changes — runs a quick analysis */

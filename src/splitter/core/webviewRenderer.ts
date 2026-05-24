@@ -746,12 +746,13 @@ function renderFiles(plan: SplitPlan): string {
   }
 
   const cards = plan.proposedFiles
-    .map((pf) => {
+    .map((pf, idx) => {
       const preview = pf.generatedContent.split("\n").slice(0, 30).join("\n");
       return `
         <div class="rc-block" style="margin:6px 12px">
           <div class="rc-block-title">
             ${I.files} <span>${esc(pf.fileName)}</span>
+            <button class="copy-btn" data-file-index="${idx}" title="Copy generated file">Copy</button>
             <span style="margin-left:auto;font-size:10px;opacity:.6">${pf.estimatedLines} lines</span>
           </div>
           ${
@@ -935,6 +936,10 @@ pre,code{font-family:var(--vscode-editor-font-family,'Consolas','Courier New',mo
 .apply-btn:active{transform:scale(.97)}
 .apply-btn svg{flex-shrink:0}
 
+/* Copy button */
+.copy-btn{margin-left:8px;padding:4px 8px;font-size:10px;font-weight:600;border:1px solid var(--vscode-panel-border,rgba(127,127,127,.35));background:transparent;color:var(--vscode-foreground,#ccc);border-radius:6px;cursor:pointer}
+.copy-btn:hover{border-color:var(--vscode-focusBorder,#007acc);color:var(--vscode-foreground,#fff)}
+
 /* State placeholder */
 .state-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:44px 20px;color:var(--vscode-descriptionForeground,#6e6e6e);text-align:center}
 .state-placeholder p{font-size:12px;font-weight:500;line-height:1.5;color:var(--vscode-foreground,#ccc);opacity:.7}
@@ -948,6 +953,12 @@ export function renderSplitPlanHtml(plan: SplitPlan): string {
   const shortName = plan.sourceFile.split(/[\\/]/).pop() ?? plan.sourceFile;
   const tabs = makeTabs(plan);
   const m = plan.metrics;
+  const filesData = JSON.stringify(
+    plan.proposedFiles.map((pf) => ({
+      fileName: pf.fileName,
+      content: pf.generatedContent,
+    })),
+  ).replace(/</g, "\\u003c");
 
   const tabContents: Record<string, string> = {
     overview: renderOverview(plan),
@@ -1057,9 +1068,36 @@ ${radioInputs}
 <div class="panels">${panels}</div>
 <script>
 const vscode = acquireVsCodeApi();
+const generatedFiles = ${filesData};
 function applyPlan() {
     vscode.postMessage({ command: 'apply' });
 }
+function copyFile(index) {
+  const file = generatedFiles[index];
+  if (!file) return;
+  vscode.postMessage({ command: 'copy', text: file.content, name: file.fileName });
+}
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const idx = Number(btn.getAttribute('data-file-index'));
+    copyFile(idx);
+  });
+});
+
+const tabInputs = Array.from(document.querySelectorAll('.tab-radio'));
+function setTab(index) {
+  if (index < 0 || index >= tabInputs.length) return;
+  tabInputs[index].checked = true;
+}
+document.addEventListener('keydown', (e) => {
+  if (['ArrowRight', 'ArrowLeft', 'Tab'].includes(e.key)) {
+    const current = tabInputs.findIndex(t => t.checked);
+    const delta = e.key === 'ArrowLeft' ? -1 : 1;
+    const next = (current + delta + tabInputs.length) % tabInputs.length;
+    setTab(next);
+    e.preventDefault();
+  }
+});
 </script>
 </body>
 </html>`;

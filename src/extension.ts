@@ -11,6 +11,7 @@ import {
 import { registerMetricsCommand } from "./commands/metrics";
 import { AstraStatusBar } from "./statusbar/statusBar";
 import { AstraDiagnosticProvider } from "./providers/diagnosticProvider";
+import { regionCache } from "./splitter/cache/regionCache";
 
 export function activate(ctx: vscode.ExtensionContext): void {
   const diagCollection = vscode.languages.createDiagnosticCollection("astra");
@@ -36,7 +37,21 @@ export function activate(ctx: vscode.ExtensionContext): void {
       const cfg = vscode.workspace.getConfiguration("astra");
       if (!cfg.get<boolean>("showOnSave")) return;
       if (!/\.(ts|tsx|js|jsx|vue|svelte)$/.test(doc.fileName)) return;
-      await vscode.commands.executeCommand("astra.analyseFile", doc.uri);
+      await vscode.commands.executeCommand("astra.analyseFile", doc.uri, {
+        showPanel: false,
+        showNotification: true,
+        reason: "save",
+      });
+    }),
+  );
+
+  // Undo-aware cache invalidation
+  ctx.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.reason !== vscode.TextDocumentChangeReason.Undo) return;
+      if (!/\.(ts|tsx|js|jsx|vue|svelte)$/.test(event.document.fileName))
+        return;
+      regionCache.invalidateFile(event.document.fileName);
     }),
   );
 
